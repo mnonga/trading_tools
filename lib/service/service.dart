@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
+import 'package:trading_tools/service/trading_service.dart';
 
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
@@ -14,7 +15,7 @@ Future<void> initializeService() async {
       onStart: onStart,
 
       // auto start service
-      autoStart: true,
+      autoStart: false,
       isForegroundMode: false, //true,
     ),
     iosConfiguration: IosConfiguration(
@@ -57,7 +58,7 @@ void onStart() {
 
   // bring to foreground
   service.setForegroundMode(false); //true
-  Timer.periodic(Duration(seconds: 5), (timer) async {
+  Timer.periodic(Duration(seconds: 10), (timer) async {
     if (!(await service.isServiceRunning())) timer.cancel();
     /*print(
         "Updated at ${DateFormat('dd-MM-yyyy – HH:mm:ss').format(DateTime.now())}");*/
@@ -70,20 +71,50 @@ void onStart() {
         backgroundColor: Colors.black.withAlpha(100),
         textColor: Colors.white,
         fontSize: 16.0);*/
-    if(false)AwesomeNotifications().createNotification(
+    /*if(false)AwesomeNotifications().createNotification(
         content: NotificationContent(
             id: 10,
             channelKey: 'basic_channel',
             title: 'Trading Tools',
-            body: "${DateFormat('dd-MM-yyyy – HH:mm:ss').format(DateTime.now())}"));
+            body: "${DateFormat('dd-MM-yyyy – HH:mm:ss').format(DateTime.now())}"));*/
     /*service.setNotificationInfo(
       title: "My App Service",
       content:
           "Updated at ${DateFormat('dd-MM-yyyy – HH:mm:ss').format(DateTime.now())}",
     );*/
 
+    scanData(service);
+
     service.sendData(
       {"current_date": DateTime.now().toIso8601String()},
     );
   });
 }
+
+scanData(FlutterBackgroundService service){
+  List<SymbolModel> symbols = TradingService.instance2.symbolsSubject.value;
+  if(symbols.isEmpty){
+    TradingService.instance2.init();
+    AwesomeNotifications().createNotification(
+        content: NotificationContent(
+            id: 10,
+            channelKey: 'basic_channel',
+            title: 'Trading Tools - ${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(DateTime.now())}',
+            body: "Initializing..."));
+    return;
+  }
+
+  AwesomeNotifications().createNotification(
+        content: NotificationContent(
+            id: 10,
+            channelKey: 'basic_channel',
+            title: 'Trading Tools - ${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(DateTime.now())}',
+            body: "Fetching..."));
+
+  for(var symbol in symbols){
+    TradingService.instance2.fetchCandles(symbol: symbol.code,subscribe: false,timeframeInSecond: Timeframe.H1.seconds, count: 3, req_id: 1000);
+  }
+
+}
+
+

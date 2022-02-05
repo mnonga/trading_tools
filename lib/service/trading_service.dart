@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:candlesticks/candlesticks.dart';
+import 'package:intl/intl.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -16,8 +18,11 @@ class Timeframe {
 
   static const List<Timeframe> LIST = [M1, M5, M15, H1, H4];
 
-  static Timeframe from(String name) =>
+  static Timeframe fromName(String name) =>
       LIST.firstWhere((element) => element.name == name);
+
+      static Timeframe fromSeconds(int seconds) =>
+      LIST.firstWhere((element) => element.seconds == seconds);
 
   static List<String> namesList() => LIST.map<String>((e) => e.name).toList();
 
@@ -54,8 +59,11 @@ class SymbolModel {
 }
 
 class TradingService {
-  static TradingService? _intance;
-  static TradingService get instance => _intance ??= new TradingService();
+  static TradingService? _instance, _instance2;
+  static TradingService get instance => _instance ??= new TradingService._();
+    static TradingService get instance2 => _instance2 ??= new TradingService._();
+
+  TradingService._();
 
   WebSocketChannel? _channel;
 
@@ -113,8 +121,9 @@ class TradingService {
         symbolsSubject.add(symbols);
         //Future.delayed(Duration(seconds: 5), () => initSymbols());
       } else if (data["msg_type"] == "candles") {
-        candlesSubscriptionId =
-            data["subscription"]["id"]; // use this to cancel via forget message
+        if(data["req_id"]==1000) return handleCandles(data["candles"], "${data['tick_history']}");
+        //if(data["req_id"]==null && data["subscription"]!=null) 
+        candlesSubscriptionId = data["subscription"]["id"]; // use this to cancel via forget message
         for (var candle in data["candles"]) {
           candles.add(Candle(
               date: DateTime.fromMillisecondsSinceEpoch(candle["epoch"] * 1000),
@@ -143,7 +152,7 @@ class TradingService {
             volume: 1000);
         if (lastCandleId == null) {
           print("ohlc: First tick");
-          candles.removeAt(0);
+          if(candles.isNotEmpty) candles.removeAt(0);
         } else if (lastCandleId == id) {
           candles.removeAt(0);
           print("ohlc: Update candle");
@@ -190,16 +199,27 @@ class TradingService {
     }));
   }
 
-  fetchCandles({required String symbol, int timeframeInSecond = 3600}) {
+  fetchCandles({required String symbol, int timeframeInSecond = 3600, bool subscribe = true, int? req_id, int count=1000}) {
     sendMessage(jsonEncode({
       "ticks_history": symbol,
       "adjust_start_time": 1,
-      "count": 1000,
+      "count": count,
       "end": "latest",
       "start": 1,
       "granularity": timeframeInSecond, // H1
       "style": "candles", //"ticks"
-      "subscribe": 1, // recevoir quand il y a un nouveau tick
+      if(subscribe) "subscribe": 1, // recevoir quand il y a un nouveau tick
+      if(req_id!=null) "req_id":req_id
     }));
+  }
+
+  handleCandles(List candlesData, String symbol){
+    AwesomeNotifications().createNotification(
+        content: NotificationContent(
+            id: 10,
+            channelKey: 'basic_channel',
+            notificationLayout: NotificationLayout.BigText,
+            title: 'Trading Tools - ${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(DateTime.now())}',
+            body: "${candlesData[0]}"));
   }
 }

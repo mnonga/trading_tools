@@ -88,7 +88,7 @@ class _ChartPageState extends State<ChartPage> {
           return Candlesticks(
             onIntervalChange: (String name) async {
               setState(() {
-                timeframe = Timeframe.from(name);
+                timeframe = Timeframe.fromName(name);
               });
               TradingService.instance
                   .setCurrentSymbol(symbol!, timeframe: timeframe);

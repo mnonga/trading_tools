@@ -81,7 +81,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String text = "Stop Service";
+  String text = "Start Service";
 
   @override
   void initState() {

@@ -1,6 +1,8 @@
 import 'package:candlesticks/candlesticks.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:trading_tools/models/models.dart';
+import 'package:trading_tools/service/app_data.dart';
 import 'package:trading_tools/service/trading_service.dart';
 
 class ChartPage extends StatefulWidget {
@@ -21,6 +23,7 @@ class _ChartPageState extends State<ChartPage> {
     // TODO: implement initState
     super.initState();
     symbol = widget.symbol;
+    TradingService.instance.resetChannel();
     TradingService.instance
         .setCurrentSymbol(widget.symbol, timeframe: timeframe);
   }
@@ -38,10 +41,10 @@ class _ChartPageState extends State<ChartPage> {
       appBar: AppBar(
         //title: Text(widget.symbol.name),
         title: StreamBuilder<List<SymbolModel>>(
-            stream: TradingService.instance.symbolsSubject,
+            stream: AppDataService.instance.symbols,
             builder: (context, snapshot) {
               if (!snapshot.hasData) return Text("...");
-              var symbols = snapshot.data!;
+              var symbols = snapshot.data!.where((element) => element.selected).toList();
               return PopupMenuButton<SymbolModel>(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,

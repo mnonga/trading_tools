@@ -1,8 +1,13 @@
+import 'dart:isolate';
+
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:intl/intl.dart';
+import 'package:trading_tools/models/models.dart';
 import 'package:trading_tools/pages/chart.dart';
+import 'package:trading_tools/service/app_data.dart';
 import 'package:trading_tools/service/service.dart';
 import 'package:trading_tools/service/trading_service.dart';
 
@@ -41,38 +46,21 @@ void main() {
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Trading Tools',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(title: 'Trading Tools'),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
   MyHomePage({Key? key, required this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
 
   final String title;
 
@@ -81,96 +69,164 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String text = "Start Service";
+  bool isServiceRunning = false;
+  final service = FlutterBackgroundService();
+  ReceivePort? _receivePort;
+
+  Future<void> _initForegroundTask() async {
+    await FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'notification_channel_id',
+        channelName: 'Price Rejection',
+        channelDescription: 'Trading Tools service is running',
+      ),
+      foregroundTaskOptions: const ForegroundTaskOptions(
+        interval: 10000,
+        autoRunOnBoot: false,
+      ),
+      printDevLog: true,
+    );
+  }
+
+  Future<bool> _startForegroundTask() async {
+    // You can save data using the saveData function.
+    await FlutterForegroundTask.saveData('customData', 'hello');
+
+    ReceivePort? receivePort;
+
+    if (await FlutterForegroundTask.isRunningService) {
+      print("Stopping the serice...");
+      await FlutterForegroundTask.stopService();
+    }
+
+    print("Starting the serice...");
+    receivePort = await FlutterForegroundTask.startService(
+      notificationTitle: 'FirstTaskHandler}',
+      notificationText: 'Started',
+      callback: startCallback,
+    );
+
+    if (receivePort != null) {
+      _receivePort = receivePort;
+      _receivePort?.listen((message) {
+        if (message is DateTime) {
+          print('receive timestamp: $message');
+          service.sendData({"current_date":message.toIso8601String()});
+        } 
+      });
+
+      return true;
+    }
+
+    return false;
+  }
 
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
+    AppDataService.instance.init();
     TradingService.instance.init();
+    _initForegroundTask();
+  }
+
+  @override
+  void dispose() {
+    // TODO: implement dispose
+    super.dispose();
+    _receivePort?.close();
+    TradingService.instance.closeChannel();
+  }
+
+  Future<void> _stopForegroundTask() async {
+    return await FlutterForegroundTask.stopService();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-        appBar: AppBar(
-          // Here we take the value from the MyHomePage object that was created by
-          // the App.build method, and use it to set our appbar title.
-          title: Text(widget.title),
-        ),
-        body: Column(
-          children: [
-            StreamBuilder<Map<String, dynamic>?>(
-              stream: FlutterBackgroundService().onDataReceived,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
-                final data = snapshot.data!;
-                DateTime? date = DateTime.tryParse(data["current_date"]);
-                return Text(DateFormat('dd-MM-yyyy – HH:mm:ss').format(date!));
-              },
+    return WithForegroundTask(
+        child: Scaffold(
+            appBar: AppBar(
+              title: Text(widget.title),
             ),
-            ElevatedButton(
-              child: Text("Foreground Mode"),
-              onPressed: () {
-                FlutterBackgroundService()
-                    .sendData({"action": "setAsForeground"});
-              },
+            body: Column(
+              children: [
+                StreamBuilder<Map<String, dynamic>?>(
+                  stream: service.onDataReceived,
+                  //stream: _receivePort,
+                  builder: (context, snapshot) {
+                    /*(()async{
+                  bool running = await service.isServiceRunning();
+                  if(running!=isServiceRunning){
+                    setState(() {
+                      isServiceRunning = running;
+                    });
+                  }
+                })();*/
+                    /*setState(() async{
+                  isServiceRunning = await service.isServiceRunning();
+                });*/
+                    if (!snapshot.hasData) {
+                      return Center(
+                        child: Text(
+                          "Service not Running",
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      );
+                    }
+                    final data = snapshot.data!;
+                    DateTime? date = DateTime.tryParse(data["current_date"]);
+                    return Text(
+                        DateFormat('dd-MM-yyyy – HH:mm:ss').format(date!));
+                  },
+                ),
+                if (isServiceRunning)
+                  ElevatedButton(
+                    child: Text("Foreground Mode"),
+                    onPressed: () {
+                      FlutterBackgroundService()
+                          .sendData({"action": "setAsForeground"});
+                    },
+                  ),
+                if (isServiceRunning)
+                  ElevatedButton(
+                    child: Text("Background Mode"),
+                    onPressed: () {
+                      FlutterBackgroundService()
+                          .sendData({"action": "setAsBackground"});
+                    },
+                  ),
+                _listview()
+              ],
             ),
-            ElevatedButton(
-              child: Text("Background Mode"),
-              onPressed: () {
-                FlutterBackgroundService()
-                    .sendData({"action": "setAsBackground"});
-              },
-            ),
-            ElevatedButton(
-              child: Text(text),
+            floatingActionButton: FloatingActionButton(
+              backgroundColor: isServiceRunning ? Colors.red : Colors.green,
               onPressed: () async {
-                final service = FlutterBackgroundService();
-                var isRunning = await service.isServiceRunning();
-                if (isRunning) {
+                /*isServiceRunning = await service.isServiceRunning();
+                if (isServiceRunning) {
                   service.sendData(
                     {"action": "stopService"},
                   );
                 } else {
                   service.start();
                 }
-
-                if (!isRunning) {
-                  text = 'Stop Service';
+                setState(() {});*/
+                isServiceRunning = await FlutterForegroundTask.isRunningService;
+                print("isServiceRunning: $isServiceRunning");
+                if (!isServiceRunning) {
+                  _startForegroundTask();
                 } else {
-                  text = 'Start Service';
+                  _stopForegroundTask();
                 }
                 setState(() {});
               },
-            ),
-            _listview()
-          ],
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            FlutterBackgroundService().sendData({
-              "hello": "world",
-            });
-          },
-          child: Icon(Icons.play_arrow),
-        ));
+              child: Icon(isServiceRunning ? Icons.close : Icons.play_arrow),
+            )));
   }
 
   _listview() {
     return StreamBuilder<List<SymbolModel>>(
-        stream: TradingService.instance.symbolsSubject,
+        stream: AppDataService.instance.symbols,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return Text("No symbols data !");
           return Expanded(
@@ -179,14 +235,19 @@ class _MyHomePageState extends State<MyHomePage> {
                   itemBuilder: (context, index) {
                     SymbolModel? symbol = snapshot.data?[index];
                     return ListTile(
-                      title: Text(
-                          "${symbol?.name} (${symbol?.code})"),
-                          subtitle: Text("${symbol?.price}"),
-                          trailing: Checkbox(value: false, onChanged: (value){
-                            print("${symbol?.name}");
-                          },),
+                      title: Text("${symbol?.name} (${symbol?.code})"),
+                      subtitle: Text("${symbol?.price}"),
+                      trailing: Checkbox(
+                        value: symbol?.selected,
+                        onChanged: (value) {
+                          print("${symbol?.name}");
+                          symbol?.selected = value!;
+                          AppDataService.instance.updateSymbol(symbol!);
+                        },
+                      ),
                       onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_)=> ChartPage(symbol: symbol!)));
+                        Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => ChartPage(symbol: symbol!)));
                       },
                     );
                   }));

@@ -2,8 +2,9 @@ import 'dart:convert';
 
 import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:trading_tools/models/models.dart';
+//import 'package:trading_tools/models/models.dart';
 import 'package:trading_tools/service/trading_service.dart';
+import 'package:trading_tools/data/database.dart';
 
 class AppDataService {
   static AppDataService? _instance;
@@ -17,9 +18,11 @@ SharedPreferences? _prefs;
       BehaviorSubject.seeded([]);
   List<SymbolModel> _symbols = [];
 
-  Stream<List<SymbolModel>> get symbols => _symbolsSubject.stream;
+  //Stream<List<SymbolModel>> get symbols => _symbolsSubject.stream;
+  Stream<List<SymbolModel>> get symbols => MyDatabase.instance.symbolsDao.selectAllStream();
 
   init() async{
+    return;
     _prefs = await SharedPreferences.getInstance();
     String? symbolsAsJson = _prefs?.getString(KEY_SYMBOLS);
     print("Saved symbols: $symbolsAsJson");
@@ -36,9 +39,10 @@ SharedPreferences? _prefs;
   }
 
   updateSymbol(SymbolModel symbol)async{
-    _symbols = _symbols.map((e) => e.code == symbol.code ? symbol : e).toList();
+    await MyDatabase.instance.symbolsDao.updateSymbol(symbol);
+    /*_symbols = _symbols.map((e) => e.code == symbol.code ? symbol : e).toList();
     _symbolsSubject.add(_symbols);
-    await save();
+    await save();*/
   }
 
   updateSymbols(List<SymbolModel> symbols)async{
@@ -47,6 +51,7 @@ SharedPreferences? _prefs;
     for(var symbol in symbols){
       int index =_symbols.indexWhere((element) => element.code == symbol.code);
       if(index!=-1){
+        
         symbol.selected = _symbols[index].selected;
         if(symbol.selected)print("Selected $symbol");
       }

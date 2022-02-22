@@ -7,7 +7,9 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
+import 'package:trading_tools/data/database.dart' as db;
 import 'package:trading_tools/models/models.dart';
+import 'package:trading_tools/service/candles_service.dart';
 import 'package:trading_tools/service/trading_service.dart';
 
 Future<void> initializeService() async {
@@ -97,7 +99,7 @@ void onStart() {
 
 scanData(FlutterBackgroundService service){
   return;
-  List<SymbolModel> symbols = TradingService.instance2.symbolsSubject.value;
+  List<db.SymbolModel> symbols = TradingService.instance2.symbolsSubject.value;
   if(symbols.isEmpty){
     TradingService.instance2.init();
     AwesomeNotifications().createNotification(
@@ -143,33 +145,47 @@ void startCallback() {
 }
 
 class FirstTaskHandler extends TaskHandler {
+  bool? useAllSymbols = false;
+
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
     print("FirstTaskHandler.onStart()");
+    sendPort?.send("STARTED");
     // You can use the getData function to get the data you saved.
-    final customData =
-        await FlutterForegroundTask.getData<String>(key: 'customData');
-    print('customData: $customData');
+    useAllSymbols = await FlutterForegroundTask.getData<bool>(key: 'use_all_symbols');
+    print('use_all_symbols: $useAllSymbols');
   }
 
   @override
   Future<void> onEvent(DateTime timestamp, SendPort? sendPort) async {
     print(
         "FirstTaskHandler.onEvent() : ${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(timestamp)}");
-    FlutterForegroundTask.updateService(
+    /*FlutterForegroundTask.updateService(
         notificationTitle:
             'FirstTaskHandler - ${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(timestamp)}',
-        notificationText: timestamp.toString());
+        notificationText: timestamp.toString());*/
 
     // Send data to the main isolate.
-    sendPort?.send(timestamp);
+    sendPort?.send("${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(timestamp)}");
+    await doInBackground();
   }
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
     print(
         "FirstTaskHandler.onDestroy() : ${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(timestamp)}");
+    CandlesService.instance.closeChannel();
     // You can use the clearAllData function to clear all the stored data.
     await FlutterForegroundTask.clearAllData();
+  }
+
+  doInBackground() async{
+    List<db.SymbolModel> symbols;
+    if(useAllSymbols!=true) symbols  = await db.MyDatabase.instance.symbolsDao.selectAllSelected();
+    else symbols = await db.MyDatabase.instance.symbolsDao.selectAll();
+    print("Using ${symbols.length} symbols");
+    for(var symbol in symbols){
+      CandlesService.instance.fetchCandles(symbolName: symbol.name, symbol: symbol.code,subscribe: false,timeframeInSecond: Timeframe.H1.seconds, count: 3, req_id: 1000);
+    }
   }
 }

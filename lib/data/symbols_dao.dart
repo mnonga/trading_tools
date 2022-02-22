@@ -27,30 +27,51 @@ class SymbolsDao extends DatabaseAccessor<MyDatabase> with _$SymbolsDaoMixin {
 
   Future<List<SymbolModel>> selectAll() => select(symbols).get();
 
+  Future<List<SymbolModel>> selectAllSelected() => (select(symbols)..where((s) => s.selected)).get();
+
   // returns the generated id
   Future<int> addSymbol(SymbolsCompanion entry) {
-    return into(symbols).insert(entry);
+    //return into(symbols).insert(entry);
+    return into(symbols).insertOnConflictUpdate(entry);
   }
 
-  Future<int> insert({required String name, required String code, required double pip, double price=0, bool seleted=false}) {
+  Future<int> insert(
+      {required String name,
+      required String code,
+      required double pip,
+      double price = 0,
+      bool seleted = false}) {
     return addSymbol(
       SymbolsCompanion(
-        name: Value(name),
-        code: Value(code),
-        pip: Value(pip),
-        price: Value(price),
-        selected: Value(seleted)
-      ),
+          name: Value(name),
+          code: Value(code),
+          pip: Value(pip),
+          price: Value(price),
+          selected: Value(seleted)),
     );
   }
 
-  Future<bool> updateSymbol(SymbolModel s){
+  Future<bool> updateSymbol(SymbolModel s) {
     return (update(symbols).replace(s));
   }
 
-  Future deleteItem(SymbolModel s) {
-    return (delete(symbols)..where((s1) => s1.id.equals(s.id))).go();
+  Future<void> updateMultipleSymbols(List<SymbolModel> list) {
+    return batch((batch) => batch.insertAllOnConflictUpdate(symbols, list));
   }
 
-  Future<int> clean()=> delete(symbols).go();
+  Future<void> refreshSymbol(SymbolModel s) {
+    return into(symbols).insert(
+      s,
+      //onConflict: DoUpdate((old) => WordsCompanion.custom(usages: old.usages + Constant(1))),
+      onConflict: DoUpdate((old) =>
+          SymbolsCompanion.custom(selected: old.selected.equals(true))),
+      //onConflict: DoUpdate((old) => s.copyWith(selected: old.selected.equals(true))),
+    );
+  }
+
+  Future deleteItem(SymbolModel s) {
+    return (delete(symbols)..where((s1) => s1.code.equals(s.code))).go();
+  }
+
+  Future<int> clean() => delete(symbols).go();
 }

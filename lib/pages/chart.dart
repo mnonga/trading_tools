@@ -1,12 +1,14 @@
 import 'package:candlesticks/candlesticks.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:trading_tools/data/database.dart' as db;
 import 'package:trading_tools/models/models.dart';
+//import 'package:trading_tools/models/models.dart';
 import 'package:trading_tools/service/app_data.dart';
 import 'package:trading_tools/service/trading_service.dart';
 
 class ChartPage extends StatefulWidget {
-  final SymbolModel symbol;
+  final db.SymbolModel symbol;
   ChartPage({Key? key, required this.symbol}) : super(key: key);
 
   @override
@@ -14,7 +16,7 @@ class ChartPage extends StatefulWidget {
 }
 
 class _ChartPageState extends State<ChartPage> {
-  SymbolModel? symbol;
+  db.SymbolModel? symbol;
 
   Timeframe timeframe = Timeframe.M1;
 
@@ -40,12 +42,12 @@ class _ChartPageState extends State<ChartPage> {
     return Scaffold(
       appBar: AppBar(
         //title: Text(widget.symbol.name),
-        title: StreamBuilder<List<SymbolModel>>(
+        title: StreamBuilder<List<db.SymbolModel>>(
             stream: AppDataService.instance.symbols,
             builder: (context, snapshot) {
               if (!snapshot.hasData) return Text("...");
               var symbols = snapshot.data!.where((element) => element.selected).toList();
-              return PopupMenuButton<SymbolModel>(
+              return PopupMenuButton<db.SymbolModel>(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(

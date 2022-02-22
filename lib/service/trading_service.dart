@@ -4,11 +4,10 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:candlesticks/candlesticks.dart';
 import 'package:intl/intl.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:trading_tools/models/models.dart';
+import 'package:trading_tools/data/database.dart' as db;
 import 'package:trading_tools/service/app_data.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-
-
+import 'package:trading_tools/models/models.dart';
 
 class TradingService {
   static TradingService? _instance, _instance2;
@@ -23,7 +22,7 @@ class TradingService {
 
   WebSocketChannel get createChannel => WebSocketChannel.connect(
         Uri.parse("wss://ws.binaryws.com/websockets/v3?app_id=1089"),
-      ); 
+      );
 
   Stream get stream => channel.stream;
 
@@ -33,7 +32,7 @@ class TradingService {
   //List candles = [];
 
   final MARKET = "synthetic_index";
-  BehaviorSubject<List<SymbolModel>> symbolsSubject =
+  BehaviorSubject<List<db.SymbolModel>> symbolsSubject =
       BehaviorSubject.seeded([]);
   //BehaviorSubject<List> candlesSubject = BehaviorSubject.seeded([]);
   BehaviorSubject<List<Candle>> candlesSubject = BehaviorSubject.seeded([]);
@@ -44,10 +43,11 @@ class TradingService {
   List<Candle> candles = [];
   String? lastCandleId;
 
-  BehaviorSubject<SymbolModel?> currentSymbolSubject =
+  BehaviorSubject<db.SymbolModel?> currentSymbolSubject =
       BehaviorSubject.seeded(null);
 
-  setCurrentSymbol(SymbolModel symbol, {Timeframe timeframe = Timeframe.M1}) {
+  setCurrentSymbol(db.SymbolModel symbol,
+      {Timeframe timeframe = Timeframe.M1}) {
     currentSymbolSubject.add(symbol);
     forgetAllSubscriptions();
     fetchCandles(symbol: symbol.code, timeframeInSecond: timeframe.seconds);
@@ -60,14 +60,15 @@ class TradingService {
       if (data["msg_type"] == "tick") {
         print("Ticks update: $data");
       } else if (data["msg_type"] == "active_symbols") {
-        List<SymbolModel> symbols = [];
+        List<db.SymbolModel> symbols = [];
         for (var symbol in data["active_symbols"]) {
           if (symbol['market'] == MARKET) {
-            symbols.add(SymbolModel(
+            symbols.add(db.SymbolModel(
                 name: symbol['display_name'],
                 code: symbol['symbol'],
                 pip: symbol['pip'],
-                price: symbol['spot'].toDouble()));
+                price: symbol['spot'].toDouble(),
+                selected: false));
           }
         }
         symbols.sort((a, b) => a.name.compareTo(b.name));
@@ -82,7 +83,8 @@ class TradingService {
         candlesSubscriptionId =
             data["subscription"]["id"]; // use this to cancel via forget message
         for (var candle in data["candles"]) {
-          candles.add(Candle.fromJson(candle));
+          //candles.add(Candle.fromJsonOHLC(candle));
+          candles.add(CandleExtension.fromJsonOHLC(candle));
         }
         print("ohlc: $data");
         candles = List.from(candles.reversed);
@@ -94,7 +96,8 @@ class TradingService {
         print("ohlc: ${lastCandleId != id ? 'new' : 'update'} $candle");
         if (candle["symbol"] != currentSymbolSubject.value?.code) return;
 
-        candle = Candle.fromJson(candle);
+        //candle = Candle.fromJson(candle);
+        candle = CandleExtension.fromJsonOHLC(candle);
         if (lastCandleId == null) {
           print("ohlc: First tick");
           if (candles.isNotEmpty) candles.removeAt(0);
@@ -111,12 +114,11 @@ class TradingService {
       } else {
         print(data);
       }
-    }, onDone: (){
+    }, onDone: () {
       print("ws: done");
-    }, onError: (error){
+    }, onError: (error) {
       print("ws: error $error");
-    },
-    cancelOnError: true);
+    }, cancelOnError: true);
   }
 
   closeChannel() {
@@ -132,7 +134,7 @@ class TradingService {
     initSymbols();
   }
 
-  resetChannel()async{
+  resetChannel() async {
     closeChannel();
     _channel = createChannel;
     initMessageListener();
@@ -184,14 +186,14 @@ class TradingService {
                 'Trading Tools - ${DateFormat(DateFormat.HOUR24_MINUTE_SECOND).format(DateTime.now())}',
             body: "${candlesData[0]}"));
 
-    for(var c in candlesData){
+    for (var c in candlesData) {
       var candle = Candle(
-              date: DateTime.fromMillisecondsSinceEpoch(c["epoch"] * 1000),
-              high: c["high"].toDouble(),
-              low: c["low"].toDouble(),
-              open: c["open"].toDouble(),
-              close: c["close"].toDouble(),
-              volume: 1000);
+          date: DateTime.fromMillisecondsSinceEpoch(c["epoch"] * 1000),
+          high: c["high"].toDouble(),
+          low: c["low"].toDouble(),
+          open: c["open"].toDouble(),
+          close: c["close"].toDouble(),
+          volume: 1000);
     }
   }
 }

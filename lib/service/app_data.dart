@@ -22,8 +22,7 @@ SharedPreferences? _prefs;
   Stream<List<SymbolModel>> get symbols => MyDatabase.instance.symbolsDao.selectAllStream();
 
   init() async{
-    return;
-    _prefs = await SharedPreferences.getInstance();
+    /*_prefs = await SharedPreferences.getInstance();
     String? symbolsAsJson = _prefs?.getString(KEY_SYMBOLS);
     print("Saved symbols: $symbolsAsJson");
 
@@ -35,7 +34,7 @@ SharedPreferences? _prefs;
       }
     }
     
-    _symbolsSubject.add(_symbols);
+    _symbolsSubject.add(_symbols);*/
   }
 
   updateSymbol(SymbolModel symbol)async{
@@ -45,25 +44,30 @@ SharedPreferences? _prefs;
     await save();*/
   }
 
-  updateSymbols(List<SymbolModel> symbols)async{
-    List<SymbolModel> temp = [];
+  updateSymbols(List<SymbolModel> list)async{
+    for(var s in list){
+      await MyDatabase.instance.symbolsDao.refreshSymbol(s);
+    }
+
+    /*List<SymbolModel> temp = [];
 
     for(var symbol in symbols){
       int index =_symbols.indexWhere((element) => element.code == symbol.code);
       if(index!=-1){
         
-        symbol.selected = _symbols[index].selected;
+        //symbol.selected = _symbols[index].selected;
+        symbol = symbol.copyWith(selected: _symbols[index].selected);
         if(symbol.selected)print("Selected $symbol");
       }
       temp.add(symbol);
     }
     _symbols = temp;
     _symbolsSubject.add(_symbols);
-    await save();
+    await save();*/
   }
 
   save()async{
-    if(_prefs==null) _prefs = await SharedPreferences.getInstance();
-    await _prefs?.setString(KEY_SYMBOLS, jsonEncode(_symbols));
+    /*if(_prefs==null) _prefs = await SharedPreferences.getInstance();
+    await _prefs?.setString(KEY_SYMBOLS, jsonEncode(_symbols));*/
   }
 }

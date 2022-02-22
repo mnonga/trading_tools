@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:intl/intl.dart';
+import 'package:trading_tools/data/database.dart' as db;
 import 'package:trading_tools/models/models.dart';
 import 'package:trading_tools/pages/chart.dart';
 import 'package:trading_tools/service/app_data.dart';
@@ -70,6 +71,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   bool isServiceRunning = false;
+  String? lastMessage;
   final service = FlutterBackgroundService();
   ReceivePort? _receivePort;
 
@@ -90,7 +92,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<bool> _startForegroundTask() async {
     // You can save data using the saveData function.
-    await FlutterForegroundTask.saveData('customData', 'hello');
+    await FlutterForegroundTask.saveData('use_all_symbols', false);
 
     ReceivePort? receivePort;
 
@@ -109,10 +111,18 @@ class _MyHomePageState extends State<MyHomePage> {
     if (receivePort != null) {
       _receivePort = receivePort;
       _receivePort?.listen((message) {
+        print('message received from service: $message');
         if (message is DateTime) {
-          print('receive timestamp: $message');
-          service.sendData({"current_date":message.toIso8601String()});
-        } 
+          //print('receive timestamp: $message');
+          //service.sendData({"current_date":message.toIso8601String()});
+        } else if (message is String) {
+          if (message == "STARTED") setState(() {});
+          else{
+            setState(() {
+              lastMessage = message;
+            });
+          }
+        }
       });
 
       return true;
@@ -169,7 +179,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     if (!snapshot.hasData) {
                       return Center(
                         child: Text(
-                          "Service not Running",
+                          "$lastMessage",
                           style: TextStyle(color: Colors.red),
                         ),
                       );
@@ -180,7 +190,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         DateFormat('dd-MM-yyyy – HH:mm:ss').format(date!));
                   },
                 ),
-                if (isServiceRunning)
+                /*if (isServiceRunning)
                   ElevatedButton(
                     child: Text("Foreground Mode"),
                     onPressed: () {
@@ -195,7 +205,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       FlutterBackgroundService()
                           .sendData({"action": "setAsBackground"});
                     },
-                  ),
+                  ),*/
                 _listview()
               ],
             ),
@@ -218,14 +228,18 @@ class _MyHomePageState extends State<MyHomePage> {
                 } else {
                   _stopForegroundTask();
                 }
-                setState(() {});
+                Future.delayed(Duration(seconds: 1), () async {
+                  isServiceRunning =
+                      await FlutterForegroundTask.isRunningService;
+                  setState(() {});
+                });
               },
               child: Icon(isServiceRunning ? Icons.close : Icons.play_arrow),
             )));
   }
 
   _listview() {
-    return StreamBuilder<List<SymbolModel>>(
+    return StreamBuilder<List<db.SymbolModel>>(
         stream: AppDataService.instance.symbols,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return Text("No symbols data !");
@@ -233,7 +247,7 @@ class _MyHomePageState extends State<MyHomePage> {
               child: ListView.builder(
                   itemCount: snapshot.data?.length,
                   itemBuilder: (context, index) {
-                    SymbolModel? symbol = snapshot.data?[index];
+                    db.SymbolModel? symbol = snapshot.data?[index];
                     return ListTile(
                       title: Text("${symbol?.name} (${symbol?.code})"),
                       subtitle: Text("${symbol?.price}"),
@@ -241,7 +255,8 @@ class _MyHomePageState extends State<MyHomePage> {
                         value: symbol?.selected,
                         onChanged: (value) {
                           print("${symbol?.name}");
-                          symbol?.selected = value!;
+                          //symbol?.selected = value!;
+                          symbol = symbol?.copyWith(selected: value!);
                           AppDataService.instance.updateSymbol(symbol!);
                         },
                       ),

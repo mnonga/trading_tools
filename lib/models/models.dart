@@ -70,8 +70,8 @@ class SymbolModel {
   }
 }
 
-extension on Candle {
-  static Candle fromJson(Map json) {
+extension CandleExtension on Candle {
+  static Candle fromJsonOHLC(Map json) {
     return Candle(
         date: DateTime.fromMillisecondsSinceEpoch(json["epoch"] * 1000),
         high: json["high"] is String
